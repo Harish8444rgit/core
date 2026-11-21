@@ -59,7 +59,7 @@ export function isSocialScraper(userAgent: string): boolean {
 /**
  * Generate HTML preview page with Open Graph meta tags
  */
-function generatePreviewHTML(
+export function generatePreviewHTML(
   link: any,
   shortUrl: string,
   autoRedirect: boolean = true

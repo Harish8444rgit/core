@@ -41,13 +41,17 @@ curl -X POST http://localhost:3000/api/links \
   }'
 ```
 
-### 3. View Logs
+### 3. Postman collection
+
+Import [`linkforty-core.postman_collection.json`](./linkforty-core.postman_collection.json). Every request uses `{{localbase_url}}` (default `http://localhost:3000`). Folders run in journey order and save ids into collection variables. The variable list and what each folder proves are in [`POSTMAN.md`](./POSTMAN.md).
+
+### 4. View Logs
 
 ```bash
 docker compose logs -f linkforty
 ```
 
-### 4. Stop Services
+### 5. Stop Services
 
 ```bash
 docker compose down

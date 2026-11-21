@@ -1,0 +1,2663 @@
+{
+  "info": {
+    "name": "LinkForty Core — feature journey",
+    "_postman_id": "linkforty-core-journey",
+    "description": "Import this collection into Postman or Insomnia (Postman v2.1).\n\nEvery request uses {{localbase_url}}. Default is http://localhost:3000 (examples/basic-server.ts and examples/docker-compose.yml).\n\nRun folders from top to bottom with the Collection Runner. Each create request saves ids into collection variables. Later folders read those variables. Do not run Cleanup until you have finished the journey.\n\nFolders 05 Social preview and 11 Debug are real routes, but createServer() does not mount them. Register previewRoutes and debugRoutes yourself before those folders. A 404 there means the plugin is not mounted, not that the URL is wrong.\n\nRead examples/POSTMAN.md for the variable list and what each folder proves.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Filled once per collection. Clear a variable in the collection editor to mint a new one.",
+          "function fill(name, value) {",
+          "  const current = pm.collectionVariables.get(name);",
+          "  if (current === undefined || current === null || String(current).trim() === '') {",
+          "    pm.collectionVariables.set(name, value);",
+          "  }",
+          "}",
+          "fill('user_id', pm.variables.replaceIn('{{$guid}}'));",
+          "fill('device_id', 'device-' + pm.variables.replaceIn('{{$guid}}'));",
+          "fill('client_event_id', pm.variables.replaceIn('{{$guid}}'));"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "localbase_url",
+      "value": "http://localhost:3000",
+      "type": "string",
+      "description": "Base URL of the LinkForty server. No trailing slash. Change this when you point at another machine."
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string",
+      "description": "UUID of the tenant for this journey. Auto-filled on the first request. Pass it as ?userId= on dashboard routes. Must be a UUID."
+    },
+    {
+      "key": "template_id",
+      "value": "",
+      "type": "string",
+      "description": "Saved from POST /api/templates. Used to read, update, set default, delete, and to attach a new link."
+    },
+    {
+      "key": "template_slug",
+      "value": "",
+      "type": "string",
+      "description": "Saved from POST /api/templates (field slug). Used by /:templateSlug/:shortCode and the scoped SDK resolve."
+    },
+    {
+      "key": "link_id",
+      "value": "",
+      "type": "string",
+      "description": "Saved from POST /api/links (field id). Used by get, update, QR, analytics, debug simulate, and cleanup."
+    },
+    {
+      "key": "short_code",
+      "value": "",
+      "type": "string",
+      "description": "Saved from POST /api/links (field short_code). Public path of the link. Also sent as customCode on create so the code is stable."
+    },
+    {
+      "key": "duplicate_link_id",
+      "value": "",
+      "type": "string",
+      "description": "Saved from POST /api/links/:id/duplicate. Deleted in Cleanup. The original link_id stays for the rest of the journey."
+    },
+    {
+      "key": "webhook_id",
+      "value": "",
+      "type": "string",
+      "description": "Saved from POST /api/webhooks. Used by get, update, test, and cleanup."
+    },
+    {
+      "key": "webhook_secret",
+      "value": "",
+      "type": "string",
+      "description": "Saved from POST /api/webhooks (field secret). The receiver checks HMAC-SHA256 of the body in header X-LinkForty-Signature. List webhooks does not return this."
+    },
+    {
+      "key": "webhook_receiver_url",
+      "value": "https://httpbin.org/post",
+      "type": "string",
+      "description": "Where LinkForty POSTs webhook events. httpbin echoes the body so you can see the test delivery. Swap for your own receiver."
+    },
+    {
+      "key": "install_id",
+      "value": "",
+      "type": "string",
+      "description": "Saved from POST /api/sdk/v1/install (field installId). Required by POST /api/sdk/v1/event."
+    },
+    {
+      "key": "fingerprint",
+      "value": "",
+      "type": "string",
+      "description": "Paste the install_events.fingerprint_hash from the database if you want GET /api/sdk/v1/attribution/:fingerprint. The install response does not return this hash."
+    },
+    {
+      "key": "device_id",
+      "value": "",
+      "type": "string",
+      "description": "Stable device id sent on install (IDFA/GAID stand-in). Auto-filled once."
+    },
+    {
+      "key": "client_event_id",
+      "value": "",
+      "type": "string",
+      "description": "UUID the app would retry with. Sending the same value twice returns the stored event with duplicate: true. Auto-filled once. Clear it to record a second event."
+    },
+    {
+      "key": "days",
+      "value": "7",
+      "type": "string",
+      "description": "Analytics window. Query ?days= on overview and per-link stats. Bot clicks are excluded."
+    },
+    {
+      "key": "fp_tz",
+      "value": "Asia/Kolkata",
+      "type": "string",
+      "description": "Device timezone. Sent on the public click as ?fp_tz= and again in the install body so fingerprint scoring can match."
+    },
+    {
+      "key": "fp_lang",
+      "value": "en-IN",
+      "type": "string",
+      "description": "Device language. Click query fp_lang and install body language. Worth 10 fingerprint points."
+    },
+    {
+      "key": "fp_sw",
+      "value": "390",
+      "type": "string",
+      "description": "Screen width in pixels. Click query fp_sw and install body screenWidth. Together with height, worth 10 points."
+    },
+    {
+      "key": "fp_sh",
+      "value": "844",
+      "type": "string",
+      "description": "Screen height in pixels. Click query fp_sh and install body screenHeight."
+    },
+    {
+      "key": "ios_user_agent",
+      "value": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+      "type": "string",
+      "description": "iPhone Safari. Use on the click that should later match the install. Same string is sent as install.userAgent (30 fingerprint points)."
+    },
+    {
+      "key": "android_user_agent",
+      "value": "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36",
+      "type": "string",
+      "description": "Android Chrome. Redirect request uses this to show the Play Store / interstitial path."
+    },
+    {
+      "key": "desktop_user_agent",
+      "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+      "type": "string",
+      "description": "Desktop Safari. Redirect goes to webFallbackUrl, or the launchpad page when there is no website."
+    },
+    {
+      "key": "crawler_user_agent",
+      "value": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+      "type": "string",
+      "description": "Known social crawler. On the public short link this returns Open Graph HTML instead of a redirect. Also used on /:shortCode/preview."
+    },
+    {
+      "key": "install_referrer",
+      "value": "",
+      "type": "string",
+      "description": "Optional. Android Play install referrer, for example lf_click=<click uuid>. When set, \"Report install\" and \"Report install with Play referrer\" send it and the match is exact."
+    },
+    {
+      "key": "play_install_id",
+      "value": "",
+      "type": "string",
+      "description": "Saved from the Android install request. Separate from {{install_id}} so the iOS fingerprint install stays the one used by Track in-app event."
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Health",
+      "description": "Proves the process is up, and that PostgreSQL answers. Call these before anything else. Liveness does not touch the database. Readiness returns 503 when PostgreSQL is down. Redis down is degraded, not unready.",
+      "item": [
+        {
+          "name": "Liveness",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/health",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "health"
+              ],
+              "query": []
+            },
+            "description": "GET /health. Process is up. Response: { status: \"ok\", uptime }. Does not query PostgreSQL. Docker and Kubernetes liveness probes use this."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('status is 2xx', () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Readiness",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/health/ready",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "health",
+                "ready"
+              ],
+              "query": []
+            },
+            "description": "GET /health/ready. Database must answer. Response includes checks.database. Redis is reported when configured. Expect 200 when Postgres is up, 503 when it is not."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 503 means Postgres is unreachable",
+                  "pm.test('status is one of 200, 503', () => {",
+                  "  pm.expect([200,503]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Templates",
+      "description": "Reusable defaults for a family of links: store URLs, attribution window, UTM tags, targeting. One template can be the default. The slug lets the public URL be /:templateSlug/:shortCode when the same short code exists on more than one template. Run this folder before Links so {{template_id}} and {{template_slug}} are saved.",
+      "item": [
+        {
+          "name": "Create template",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/templates",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "templates"
+              ],
+              "query": []
+            },
+            "description": "POST /api/templates. Creates a product-link template. Saves id → {{template_id}} and slug → {{template_slug}}. userId must be a UUID. isDefault false here; the next requests mark it default on purpose so you can see that step.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"name\": \"Journey product links\",\n  \"description\": \"Shared App Store, Play Store, website, and a 7-day attribution window.\",\n  \"isDefault\": false,\n  \"settings\": {\n    \"defaultIosUrl\": \"https://apps.apple.com/app/id1234567890\",\n    \"defaultAndroidUrl\": \"https://play.google.com/store/apps/details?id=com.example.app\",\n    \"defaultWebFallbackUrl\": \"https://example.com/products\",\n    \"defaultAttributionWindowHours\": 168,\n    \"utmParameters\": {\n      \"source\": \"template\",\n      \"medium\": \"shared\",\n      \"campaign\": \"product-links\"\n    },\n    \"targetingRules\": {\n      \"devices\": [\n        \"ios\",\n        \"android\",\n        \"web\"\n      ]\n    },\n    \"expiresAfterDays\": 90\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body?.id) pm.collectionVariables.set('template_id', body?.id);",
+                  "if (body?.slug) pm.collectionVariables.set('template_slug', body?.slug);",
+                  "pm.test('status is 2xx', () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List templates",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/templates?userId={{user_id}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "templates"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "Tenant id. Same value for the whole journey so lists only show your rows.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "GET /api/templates?userId={{user_id}}. Returns only this tenant’s templates, default first. Omit userId to list every template (single-tenant)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get template",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/templates/{{template_id}}?userId={{user_id}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "{{template_id}}"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "Tenant id. Same value for the whole journey so lists only show your rows.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "GET /api/templates/:id. One template. 404-style error when the id is unknown or belongs to another userId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update template",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/templates/{{template_id}}?userId={{user_id}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "{{template_id}}"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "Tenant id. Same value for the whole journey so lists only show your rows.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "PUT /api/templates/:id. Partial update. Slug does not change. Settings replace the stored settings object.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated during the journey test.\",\n  \"settings\": {\n    \"defaultIosUrl\": \"https://apps.apple.com/app/id1234567890\",\n    \"defaultAndroidUrl\": \"https://play.google.com/store/apps/details?id=com.example.app\",\n    \"defaultWebFallbackUrl\": \"https://example.com/products\",\n    \"defaultAttributionWindowHours\": 168,\n    \"utmParameters\": {\n      \"source\": \"template\",\n      \"medium\": \"shared\",\n      \"campaign\": \"product-links-v2\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set default template",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/templates/{{template_id}}/set-default?userId={{user_id}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "{{template_id}}",
+                "set-default"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "Tenant id. Same value for the whole journey so lists only show your rows.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "PUT /api/templates/:id/set-default. Marks this template as the default and clears is_default on the tenant’s other templates."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 Links",
+      "description": "The short link everything else hangs off. Create uses {{template_id}} when that variable is set, and a stable {{short_code}}. The short code does not change on update. Duplicate makes a second code and saves {{duplicate_link_id}}. Deletes are in folder 12 so analytics and the SDK still have this link.",
+      "item": [
+        {
+          "name": "Create link",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/links",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "links"
+              ],
+              "query": []
+            },
+            "description": "POST /api/links. Campaign link for product 123.\n\nSaves id → {{link_id}} and short_code → {{short_code}}.\n\nThe pre-request builds the JSON so templateId is omitted when you have not created a template yet (an empty string is not a valid UUID). It also mints {{short_code}} once and sends it as customCode.\n\nSend attributionWindowHours or attributionWindowMinutes, not both. Hours max 2160 (90 days). Minutes min 5, max 129600. Default window is 168 hours.\n\nappScheme must match ^[a-z][a-z0-9+.-]*$.\n\ntargetingRules on this link allow ios, android, and web, and language en. Country rules are left off: a request from localhost often has no country, and a country list would 404 that click. Add countries such as [\"IN\",\"US\"] only when the visitor IP resolves to one of them.",
+            "body": {
+              "mode": "raw",
+              "raw": "{{create_link_body}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('short_code')) {",
+                  "  const code = ('j' + pm.variables.replaceIn('{{$guid}}')).replace(/-/g, '').slice(0, 12);",
+                  "  pm.collectionVariables.set('short_code', code);",
+                  "}",
+                  "const body = {",
+                  "  userId: pm.collectionVariables.get('user_id'),",
+                  "  originalUrl: 'https://example.com/products/123',",
+                  "  title: 'Summer product 123',",
+                  "  description: 'Opens /product/123 in the app, otherwise the store or the website.',",
+                  "  iosAppStoreUrl: 'https://apps.apple.com/app/id1234567890',",
+                  "  androidAppStoreUrl: 'https://play.google.com/store/apps/details?id=com.example.app',",
+                  "  webFallbackUrl: 'https://example.com/products/123',",
+                  "  appScheme: 'myapp',",
+                  "  deepLinkPath: '/product/123',",
+                  "  deepLinkParameters: { productId: '123', ref: 'journey' },",
+                  "  customCode: pm.collectionVariables.get('short_code'),",
+                  "  utmParameters: { source: 'journey', medium: 'postman', campaign: 'summer', content: 'product-123' },",
+                  "  targetingRules: { devices: ['ios', 'android', 'web'], languages: ['en'] },",
+                  "  ogTitle: 'Summer product 123',",
+                  "  ogDescription: 'Back in stock. Open in the app.',",
+                  "  ogImageUrl: 'https://example.com/og/product-123.png',",
+                  "  ogType: 'website',",
+                  "  launchpadMode: 'inherit',",
+                  "  attributionWindowHours: 168,",
+                  "  oneInstallPerClick: false",
+                  "};",
+                  "const templateId = pm.collectionVariables.get('template_id');",
+                  "if (templateId) body.templateId = templateId;",
+                  "pm.variables.set('create_link_body', JSON.stringify(body, null, 2));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body?.id) pm.collectionVariables.set('link_id', body?.id);",
+                  "if (body?.short_code) pm.collectionVariables.set('short_code', body?.short_code);",
+                  "pm.test('status is 2xx', () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List links",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/links?userId={{user_id}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "links"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "Tenant id. Same value for the whole journey so lists only show your rows.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "GET /api/links?userId={{user_id}}. Each row includes clickCount, utmParameters, targetingRules, deepLinkParameters, and template_slug when the link has a template."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get link",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/links/{{link_id}}?userId={{user_id}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "links",
+                "{{link_id}}"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "Tenant id. Same value for the whole journey so lists only show your rows.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "GET /api/links/:id. One link plus clickCount. userId scopes the lookup to that tenant."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update link",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/links/{{link_id}}?userId={{user_id}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "links",
+                "{{link_id}}"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "Tenant id. Same value for the whole journey so lists only show your rows.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "PUT /api/links/:id. Partial update. short_code stays the same. isActive false stops the public redirect. Do not send both attribution window units.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Summer product 123 (updated)\",\n  \"ogTitle\": \"Summer product 123 (updated)\",\n  \"isActive\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Duplicate link",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/links/{{link_id}}/duplicate?userId={{user_id}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "links",
+                "{{link_id}}",
+                "duplicate"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "Tenant id. Same value for the whole journey so lists only show your rows.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "POST /api/links/:id/duplicate. Clones the link onto a new short code. Saves that id as {{duplicate_link_id}}. The original {{link_id}} and {{short_code}} are left in place for redirect, QR, analytics, and the SDK."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body?.id) pm.collectionVariables.set('duplicate_link_id', body?.id);",
+                  "pm.test('status is 2xx', () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 Public redirect",
+      "description": "What a person (or a crawler) hits. Follow redirects is OFF so you see the 302 and the Location header instead of the destination site. The click is written in the background, including fingerprint query params, so folder 09 can match an install. Run the iPhone request before SDK install. Targeting that does not match returns 404.",
+      "item": [
+        {
+          "name": "Open short link as iPhone",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "User-Agent",
+                "value": "{{ios_user_agent}}"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{fp_lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/{{short_code}}?fp_tz={{fp_tz}}&fp_lang={{fp_lang}}&fp_sw={{fp_sw}}&fp_sh={{fp_sh}}&utm_source=journey&product=123",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "{{short_code}}"
+              ],
+              "query": [
+                {
+                  "key": "fp_tz",
+                  "value": "{{fp_tz}}",
+                  "description": "Fingerprint timezone stored on the click.",
+                  "disabled": false
+                },
+                {
+                  "key": "fp_lang",
+                  "value": "{{fp_lang}}",
+                  "description": "Fingerprint language stored on the click.",
+                  "disabled": false
+                },
+                {
+                  "key": "fp_sw",
+                  "value": "{{fp_sw}}",
+                  "description": "Fingerprint screen width.",
+                  "disabled": false
+                },
+                {
+                  "key": "fp_sh",
+                  "value": "{{fp_sh}}",
+                  "description": "Fingerprint screen height.",
+                  "disabled": false
+                },
+                {
+                  "key": "utm_source",
+                  "value": "journey",
+                  "description": "Inbound UTM wins over the UTM saved on the link.",
+                  "disabled": false
+                },
+                {
+                  "key": "product",
+                  "value": "123",
+                  "description": "Non-reserved query param. Stored as link_params and returned to the app on resolve/install.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "GET /:shortCode as an iPhone. This is the click the later install should match. Same User-Agent, timezone, language, and screen size as the install body. IP match is 40 points and User-Agent match is 30, so those two alone reach the 70-point threshold when Postman and the server see the same client IP. fp_* adds timezone, language, and screen. Expect 302. Location is the app, the store, or the website."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 302 redirect, 200 launchpad/interstitial HTML, 404 if targeting excludes you",
+                  "pm.test('status is one of 302, 200, 404', () => {",
+                  "  pm.expect([302,200,404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          }
+        },
+        {
+          "name": "Open short link as Android",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "User-Agent",
+                "value": "{{android_user_agent}}"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{fp_lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/{{short_code}}?fp_tz={{fp_tz}}&fp_lang={{fp_lang}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "{{short_code}}"
+              ],
+              "query": [
+                {
+                  "key": "fp_tz",
+                  "value": "{{fp_tz}}",
+                  "description": "Fingerprint timezone.",
+                  "disabled": false
+                },
+                {
+                  "key": "fp_lang",
+                  "value": "{{fp_lang}}",
+                  "description": "Fingerprint language.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "GET /:shortCode as Android Chrome. Play Store destinations carry lf_click=<click id> in the install referrer. A later install can send that string as installReferrer and match this exact click at confidence 100."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 302, 200, 404', () => {",
+                  "  pm.expect([302,200,404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          }
+        },
+        {
+          "name": "Open short link as desktop",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "User-Agent",
+                "value": "{{desktop_user_agent}}"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{fp_lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/{{short_code}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "{{short_code}}"
+              ],
+              "query": []
+            },
+            "description": "GET /:shortCode as desktop Safari. With webFallbackUrl set, expect a 302 to the website plus UTM tags. With no website, expect the launchpad HTML (store buttons and a QR code). launchpadMode on the link can force the page on or off."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 302, 200, 404', () => {",
+                  "  pm.expect([302,200,404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          }
+        },
+        {
+          "name": "Open short link as social crawler",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "User-Agent",
+                "value": "{{crawler_user_agent}}"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{fp_lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/{{short_code}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "{{short_code}}"
+              ],
+              "query": []
+            },
+            "description": "GET /:shortCode with a Facebook crawler User-Agent. Known bots receive Open Graph HTML (og:title, og:description, og:image) instead of being redirected to the store. Real browsers still redirect."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200, 302, 404', () => {",
+                  "  pm.expect([200,302,404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          }
+        },
+        {
+          "name": "Open template-scoped short link",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "User-Agent",
+                "value": "{{ios_user_agent}}"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{fp_lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/{{template_slug}}/{{short_code}}?fp_tz={{fp_tz}}&fp_lang={{fp_lang}}&fp_sw={{fp_sw}}&fp_sh={{fp_sh}}&utm_source=journey&product=123",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "{{template_slug}}",
+                "{{short_code}}"
+              ],
+              "query": [
+                {
+                  "key": "fp_tz",
+                  "value": "{{fp_tz}}",
+                  "description": "Fingerprint timezone stored on the click.",
+                  "disabled": false
+                },
+                {
+                  "key": "fp_lang",
+                  "value": "{{fp_lang}}",
+                  "description": "Fingerprint language stored on the click.",
+                  "disabled": false
+                },
+                {
+                  "key": "fp_sw",
+                  "value": "{{fp_sw}}",
+                  "description": "Fingerprint screen width.",
+                  "disabled": false
+                },
+                {
+                  "key": "fp_sh",
+                  "value": "{{fp_sh}}",
+                  "description": "Fingerprint screen height.",
+                  "disabled": false
+                },
+                {
+                  "key": "utm_source",
+                  "value": "journey",
+                  "description": "Inbound UTM wins over the UTM saved on the link.",
+                  "disabled": false
+                },
+                {
+                  "key": "product",
+                  "value": "123",
+                  "description": "Non-reserved query param. Stored as link_params and returned to the app on resolve/install.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "GET /:templateSlug/:shortCode. Same redirect, limited to links on that template. Use this when two templates share a short code. Needs {{template_slug}} from folder 02."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 302, 200, 404', () => {",
+                  "  pm.expect([302,200,404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Social preview",
+      "description": "GET /:shortCode/preview returns Open Graph HTML for Slack, iMessage, Facebook, and LinkedIn. createServer() does not register previewRoutes. Mount previewRoutes or this folder returns 404. The crawler behavior on GET /:shortCode (folder 04) works without this route.",
+      "item": [
+        {
+          "name": "Preview card",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "User-Agent",
+                "value": "{{crawler_user_agent}}"
+              },
+              {
+                "key": "Accept",
+                "value": "text/html"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/{{short_code}}/preview",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "{{short_code}}",
+                "preview"
+              ],
+              "query": []
+            },
+            "description": "GET /:shortCode/preview. HTML with og:title, og:description, and og:image from the link. Meant for crawlers. Requires previewRoutes to be registered."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 404 when previewRoutes is not registered",
+                  "pm.test('status is one of 200, 404', () => {",
+                  "  pm.expect([200,404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 QR codes",
+      "description": "PNG or SVG of the short URL. A scan follows the same redirect as a tap. Response is an image, not JSON. format=png|svg, size 128–2048, color and bgcolor are hex.",
+      "item": [
+        {
+          "name": "QR code PNG",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "image/png"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/links/{{link_id}}/qr?format=png&size=256&color=#111827&bgcolor=#ffffff",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "links",
+                "{{link_id}}",
+                "qr"
+              ],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "png",
+                  "description": "png or svg. Default png.",
+                  "disabled": false
+                },
+                {
+                  "key": "size",
+                  "value": "256",
+                  "description": "Pixels, clamped to 128–2048. Default 512.",
+                  "disabled": false
+                },
+                {
+                  "key": "color",
+                  "value": "#111827",
+                  "description": "Foreground hex.",
+                  "disabled": false
+                },
+                {
+                  "key": "bgcolor",
+                  "value": "#ffffff",
+                  "description": "Background hex.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "GET /api/links/:id/qr?format=png. Body is image/png. In Postman, use Send and Download, or the visualizer, to see the image."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "QR code SVG",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "image/svg+xml"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/links/{{link_id}}/qr?format=svg&size=256",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "links",
+                "{{link_id}}",
+                "qr"
+              ],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "svg",
+                  "description": "Vector QR for print.",
+                  "disabled": false
+                },
+                {
+                  "key": "size",
+                  "value": "256",
+                  "description": "Pixels, clamped to 128–2048.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "GET /api/links/:id/qr?format=svg. Body is image/svg+xml."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 Analytics",
+      "description": "Read model over click_events. Run folder 04 first so there is at least one click. ?days= limits the window ({{days}} defaults to 7). Bot clicks are excluded. These routes do not change routing.",
+      "item": [
+        {
+          "name": "Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/analytics/overview?userId={{user_id}}&days={{days}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "analytics",
+                "overview"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "Tenant id. Same value for the whole journey so lists only show your rows.",
+                  "disabled": false
+                },
+                {
+                  "key": "days",
+                  "value": "{{days}}",
+                  "description": "How many days back. Default on the server is 30 when omitted.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "GET /api/analytics/overview. Totals, unique clicks, and breakdowns by date, country, device, platform, hour, UTM, and referrer, plus topLinks."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "One link",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/analytics/links/{{link_id}}?userId={{user_id}}&days={{days}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "analytics",
+                "links",
+                "{{link_id}}"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "Tenant id. Same value for the whole journey so lists only show your rows.",
+                  "disabled": false
+                },
+                {
+                  "key": "days",
+                  "value": "{{days}}",
+                  "description": "Window in days.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "GET /api/analytics/links/:linkId. Same shape as the overview, scoped to {{link_id}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08 Webhooks",
+      "description": "Push click_event, install_event, and conversion_event to another system. The server generates the secret. Payloads are signed HMAC-SHA256 in X-LinkForty-Signature. Failed deliveries are retried. The test request POSTs a sample payload to {{webhook_receiver_url}}.",
+      "item": [
+        {
+          "name": "Create webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/webhooks",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "webhooks"
+              ],
+              "query": []
+            },
+            "description": "POST /api/webhooks. Saves id → {{webhook_id}} and secret → {{webhook_secret}}. events must be one or more of click_event, install_event, conversion_event. retryCount 1–10 (default 3). timeoutMs 1000–60000 (default 10000).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"name\": \"Journey receiver\",\n  \"url\": \"{{webhook_receiver_url}}\",\n  \"events\": [\n    \"click_event\",\n    \"install_event\",\n    \"conversion_event\"\n  ],\n  \"headers\": {\n    \"X-Workspace\": \"journey\"\n  },\n  \"retryCount\": 3,\n  \"timeoutMs\": 10000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body?.id) pm.collectionVariables.set('webhook_id', body?.id);",
+                  "if (body?.secret) pm.collectionVariables.set('webhook_secret', body?.secret);",
+                  "pm.test('status is 2xx', () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List webhooks",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/webhooks?userId={{user_id}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "webhooks"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "Tenant id. Same value for the whole journey so lists only show your rows.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "GET /api/webhooks. Secrets are hidden in the list. Use Get webhook to read the secret again."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get webhook",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/webhooks/{{webhook_id}}?userId={{user_id}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "{{webhook_id}}"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "Tenant id. Same value for the whole journey so lists only show your rows.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "GET /api/webhooks/:id. Includes secret. Saves it again into {{webhook_secret}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body?.secret) pm.collectionVariables.set('webhook_secret', body?.secret);",
+                  "pm.test('status is 2xx', () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update webhook",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/webhooks/{{webhook_id}}?userId={{user_id}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "{{webhook_id}}"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "Tenant id. Same value for the whole journey so lists only show your rows.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "PUT /api/webhooks/:id. Change name, url, events, isActive, headers, retryCount, or timeoutMs. The secret stays the same.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Journey receiver (updated)\",\n  \"isActive\": true,\n  \"events\": [\n    \"click_event\",\n    \"install_event\",\n    \"conversion_event\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Send test payload",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/webhooks/{{webhook_id}}/test?userId={{user_id}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "{{webhook_id}}",
+                "test"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "Tenant id. Same value for the whole journey so lists only show your rows.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "POST /api/webhooks/:id/test. LinkForty POSTs a sample event to the webhook URL and returns the delivery result (HTTP status from the receiver, or an error). httpbin.org/post should return success."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "09 Mobile SDK",
+      "description": "Called by the app, not by the dashboard. Order inside this folder: health, resolve (app already installed), install (app just installed), attribution lookup, in-app event. Resolve also records a click. Install tries to match the iPhone click from folder 04. Event needs {{install_id}}.",
+      "item": [
+        {
+          "name": "SDK health",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/sdk/v1/health",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "sdk",
+                "v1",
+                "health"
+              ],
+              "query": []
+            },
+            "description": "GET /api/sdk/v1/health. SDK connectivity check. Response: { status: \"healthy\", version: \"v1\", timestamp }."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resolve short code",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "User-Agent",
+                "value": "{{ios_user_agent}}"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{fp_lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/sdk/v1/resolve/{{short_code}}?fp_tz={{fp_tz}}&fp_lang={{fp_lang}}&fp_sw={{fp_sw}}&fp_sh={{fp_sh}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "sdk",
+                "v1",
+                "resolve",
+                "{{short_code}}"
+              ],
+              "query": [
+                {
+                  "key": "fp_tz",
+                  "value": "{{fp_tz}}",
+                  "description": "Stored on the click this resolve records.",
+                  "disabled": false
+                },
+                {
+                  "key": "fp_lang",
+                  "value": "{{fp_lang}}",
+                  "description": "Stored on the click this resolve records.",
+                  "disabled": false
+                },
+                {
+                  "key": "fp_sw",
+                  "value": "{{fp_sw}}",
+                  "description": "Screen width.",
+                  "disabled": false
+                },
+                {
+                  "key": "fp_sh",
+                  "value": "{{fp_sh}}",
+                  "description": "Screen height.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "GET /api/sdk/v1/resolve/:shortCode. App is already installed and was opened by the link. Returns deep link JSON: shortCode, linkId, deepLinkPath, appScheme, iosUrl, androidUrl, webUrl, utmParameters, customParameters, clickedAt, isDeferred false. Also writes a click."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resolve with template slug",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "User-Agent",
+                "value": "{{ios_user_agent}}"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/sdk/v1/resolve/{{template_slug}}/{{short_code}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "sdk",
+                "v1",
+                "resolve",
+                "{{template_slug}}",
+                "{{short_code}}"
+              ],
+              "query": []
+            },
+            "description": "GET /api/sdk/v1/resolve/:templateSlug/:shortCode. Same JSON as resolve, scoped to the template. Needs {{template_slug}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200, 404', () => {",
+                  "  pm.expect([200,404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Report install",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/sdk/v1/install",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "sdk",
+                "v1",
+                "install"
+              ],
+              "query": []
+            },
+            "description": "POST /api/sdk/v1/install. First app open after install. Saves installId → {{install_id}}.\n\nMatch order:\n1. installReferrer containing lf_click=<click id> matches that click (Android Play referrer). Confidence 100. Leave it empty in this request to exercise fingerprint matching.\n2. Otherwise score recent clicks inside the link's attribution window: IP 40, user agent 30, timezone 10, language 10, screen 10. Need 70+.\n3. Below 70 the install is organic: attributed false, deepLinkData null.\n\nUse the same user agent and fp_* values as \"Open short link as iPhone\". The server uses the connection IP, not body.ipAddress, for the score.\n\nResponse fields: installId, attributed, confidenceScore, matchedFactors, attributionMethod (install_referrer | fingerprint | none), competingLinks, deepLinkData.",
+            "body": {
+              "mode": "raw",
+              "raw": "{{install_body}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// screenWidth and screenHeight must be numbers. Rebuild from variables so a changed fp_sw is sent as a number.",
+                  "const body = {",
+                  "  userAgent: pm.collectionVariables.get('ios_user_agent'),",
+                  "  timezone: pm.collectionVariables.get('fp_tz'),",
+                  "  language: pm.collectionVariables.get('fp_lang'),",
+                  "  screenWidth: Number(pm.collectionVariables.get('fp_sw')),",
+                  "  screenHeight: Number(pm.collectionVariables.get('fp_sh')),",
+                  "  platform: 'ios',",
+                  "  platformVersion: '17.0',",
+                  "  deviceId: pm.collectionVariables.get('device_id'),",
+                  "  sdkName: 'postman-journey',",
+                  "  sdkVersion: '1.0.0'",
+                  "};",
+                  "const referrer = pm.collectionVariables.get('install_referrer');",
+                  "if (referrer) body.installReferrer = referrer;",
+                  "pm.variables.set('install_body', JSON.stringify(body, null, 2));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.installId) pm.collectionVariables.set('install_id', body.installId);",
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('installId is present', () => pm.expect(body.installId).to.be.a('string'));",
+                  "console.log(\"attributed:\", body.attributed, \"method:\", body.attributionMethod, \"score:\", body.confidenceScore);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Report install with Play referrer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/sdk/v1/install",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "sdk",
+                "v1",
+                "install"
+              ],
+              "query": []
+            },
+            "description": "Same endpoint, Android path. Set collection variable install_referrer to the lf_click value you saw on a Play Store redirect (lf_click=<uuid>), then send this. attributionMethod should be install_referrer. This request does not overwrite {{install_id}} when you want to keep the fingerprint install; it saves play_install_id instead. Leave install_referrer empty and this body omits the field.",
+            "body": {
+              "mode": "raw",
+              "raw": "{{play_install_body}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = {",
+                  "  userAgent: pm.collectionVariables.get('android_user_agent'),",
+                  "  timezone: pm.collectionVariables.get('fp_tz'),",
+                  "  language: pm.collectionVariables.get('fp_lang'),",
+                  "  screenWidth: 412,",
+                  "  screenHeight: 915,",
+                  "  platform: 'android',",
+                  "  platformVersion: '14',",
+                  "  deviceId: pm.collectionVariables.get('device_id') + '-android',",
+                  "  sdkName: 'postman-journey',",
+                  "  sdkVersion: '1.0.0'",
+                  "};",
+                  "const referrer = pm.collectionVariables.get('install_referrer');",
+                  "if (referrer) body.installReferrer = referrer;",
+                  "pm.variables.set('play_install_body', JSON.stringify(body, null, 2));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.installId) pm.collectionVariables.set('play_install_id', body.installId);",
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "console.log(\"attributed:\", body.attributed, \"method:\", body.attributionMethod);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lookup attribution",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/sdk/v1/attribution/{{fingerprint}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "sdk",
+                "v1",
+                "attribution",
+                "{{fingerprint}}"
+              ],
+              "query": []
+            },
+            "description": "GET /api/sdk/v1/attribution/:fingerprint. Debug or delayed check. Paste install_events.fingerprint_hash into {{fingerprint}}. The install API does not return that hash. 404 with \"No install event found\" until the variable is a real hash. On a hit: fingerprint, attributed, installEvent, clickEvent, linkData."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200, 404', () => {",
+                  "  pm.expect([200,404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Track in-app event",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/sdk/v1/event",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "sdk",
+                "v1",
+                "event"
+              ],
+              "query": []
+            },
+            "description": "POST /api/sdk/v1/event. Something that happened after install: signup, add to cart, purchase.\n\nNeeds {{install_id}}. Saves nothing new except you can read eventId in the response.\n\nclientEventId makes retries safe. The collection keeps one UUID in {{client_event_id}}. Send this request twice: the second response has duplicate: true and the same eventId.\n\nRevenue convention: eventName \"revenue\" and eventData.revenue plus eventData.currency.\n\nOptional last-click fields: attributedLinkId, attributedClickId, linkOpenedAt, sessionId.",
+            "body": {
+              "mode": "raw",
+              "raw": "{{event_body}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = {",
+                  "  installId: pm.collectionVariables.get('install_id'),",
+                  "  eventName: 'signup',",
+                  "  eventData: { plan: 'pro', trial: true },",
+                  "  clientEventId: pm.collectionVariables.get('client_event_id'),",
+                  "  sdkName: 'postman-journey',",
+                  "  sdkVersion: '1.0.0'",
+                  "};",
+                  "const linkId = pm.collectionVariables.get('link_id');",
+                  "if (linkId) body.attributedLinkId = linkId;",
+                  "pm.variables.set('event_body', JSON.stringify(body, null, 2));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('event acknowledged', () => pm.expect(body.acknowledged).to.eql(true));",
+                  "console.log(\"eventId:\", body.eventId, \"duplicate:\", body.duplicate === true);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10 App association files",
+      "description": "Apple and Google fetch these once to allow the domain to open the app without a browser prompt. Without the env vars the server returns 404 and a message naming the missing variables. Taps still work; they go through the browser, the store, or the interstitial.",
+      "item": [
+        {
+          "name": "Apple app site association",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/.well-known/apple-app-site-association",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                ".well-known",
+                "apple-app-site-association"
+              ],
+              "query": []
+            },
+            "description": "GET /.well-known/apple-app-site-association. 200 JSON when IOS_TEAM_ID and IOS_BUNDLE_ID are set. 404 with error \"Configuration missing\" otherwise. Served as application/json with no .json extension."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200, 404', () => {",
+                  "  pm.expect([200,404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Android asset links",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/.well-known/assetlinks.json",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                ".well-known",
+                "assetlinks.json"
+              ],
+              "query": []
+            },
+            "description": "GET /.well-known/assetlinks.json. 200 when ANDROID_PACKAGE_NAME and ANDROID_SHA256_FINGERPRINTS are set (comma-separated SHA-256 cert fingerprints). 404 when they are missing."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200, 404', () => {",
+                  "  pm.expect([200,404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "11 Debug",
+      "description": "Dry-run routing and sample fixtures. createServer() does not register debugRoutes. Mount debugRoutes or these return 404. Simulate does not write a click. The live socket is a WebSocket; Postman can open it with New → WebSocket using the URL in that request.",
+      "item": [
+        {
+          "name": "Simulate iPhone in India",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/debug/simulate",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "debug",
+                "simulate"
+              ],
+              "query": []
+            },
+            "description": "POST /api/debug/simulate. Answers \"where would this device go?\" without inserting a click. deviceType ios|android|web. country is a 2-letter ISO code. language is like en or en-IN. ipAddress must be a valid IP if you send it. Requires debugRoutes.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"linkId\": \"{{link_id}}\",\n  \"userId\": \"{{user_id}}\",\n  \"deviceType\": \"ios\",\n  \"country\": \"IN\",\n  \"language\": \"en\",\n  \"userAgent\": \"{{ios_user_agent}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 404 when debugRoutes is not registered",
+                  "pm.test('status is one of 200, 404', () => {",
+                  "  pm.expect([200,404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Simulate desktop in the US",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/debug/simulate",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "debug",
+                "simulate"
+              ],
+              "query": []
+            },
+            "description": "POST /api/debug/simulate for a desktop visitor. Expect redirectReason to mention web_fallback_url when the link has a website.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"linkId\": \"{{link_id}}\",\n  \"userId\": \"{{user_id}}\",\n  \"deviceType\": \"web\",\n  \"country\": \"US\",\n  \"language\": \"en\",\n  \"userAgent\": \"{{desktop_user_agent}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200, 404', () => {",
+                  "  pm.expect([200,404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sample user agents",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/debug/user-agents",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "debug",
+                "user-agents"
+              ],
+              "query": []
+            },
+            "description": "GET /api/debug/user-agents. iOS, Android, and desktop User-Agent strings you can copy into {{ios_user_agent}}, {{android_user_agent}}, or {{desktop_user_agent}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200, 404', () => {",
+                  "  pm.expect([200,404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sample countries",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/debug/countries",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "debug",
+                "countries"
+              ],
+              "query": []
+            },
+            "description": "GET /api/debug/countries. ISO country codes for simulate and for targetingRules.countries."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200, 404', () => {",
+                  "  pm.expect([200,404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sample languages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/debug/languages",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "debug",
+                "languages"
+              ],
+              "query": []
+            },
+            "description": "GET /api/debug/languages. Language codes for simulate and for targetingRules.languages."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200, 404', () => {",
+                  "  pm.expect([200,404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Live click stream (WebSocket)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/debug/live?userId={{user_id}}&linkId={{link_id}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "debug",
+                "live"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "Only clicks for this tenant. Omit to see all.",
+                  "disabled": false
+                },
+                {
+                  "key": "linkId",
+                  "value": "{{link_id}}",
+                  "description": "Only clicks on this link. Omit to see all of the user.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "WebSocket /api/debug/live. Not a normal HTTP GET. In Postman choose New → WebSocket and connect to ws://localhost:3000/api/debug/live?userId={{user_id}}&linkId={{link_id}} (replace http with ws, or https with wss). First message is { type: \"connected\" }. Each real click (folder 04 or SDK resolve) arrives as { type: \"click_event\", data }. Requires debugRoutes. This HTTP request only documents the path; expect 404 on the default server."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 404, 426, 400, 200', () => {",
+                  "  pm.expect([404,426,400,200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "12 Cleanup",
+      "description": "Deletes the rows this journey created. Run this last. Order: duplicate link, webhook, template. The original link is deleted last. Deleting the template does not delete links that still point at it; delete links first if you need a clean tenant. Skipping this folder leaves the data in PostgreSQL so you can re-open analytics.",
+      "item": [
+        {
+          "name": "Delete duplicate link",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/links/{{duplicate_link_id}}?userId={{user_id}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "links",
+                "{{duplicate_link_id}}"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "Tenant id. Same value for the whole journey so lists only show your rows.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "DELETE /api/links/:id for the clone. Original {{link_id}} remains until the last request in this folder."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Fails when duplicate_link_id was never saved",
+                  "pm.test('status is one of 200, 500', () => {",
+                  "  pm.expect([200,500]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete webhook",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/webhooks/{{webhook_id}}?userId={{user_id}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "{{webhook_id}}"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "Tenant id. Same value for the whole journey so lists only show your rows.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "DELETE /api/webhooks/:id. Stops deliveries. The secret is discarded with the row."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete template",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/templates/{{template_id}}?userId={{user_id}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "templates",
+                "{{template_id}}"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "Tenant id. Same value for the whole journey so lists only show your rows.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "DELETE /api/templates/:id. Removes the shared defaults. Run after you are done creating links from it."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete link",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{localbase_url}}/api/links/{{link_id}}?userId={{user_id}}",
+              "host": [
+                "{{localbase_url}}"
+              ],
+              "path": [
+                "api",
+                "links",
+                "{{link_id}}"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "Tenant id. Same value for the whole journey so lists only show your rows.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "DELETE /api/links/:id. Removes the campaign link. Public /{{short_code}} 404s after this. Run last."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// status check",
+                  "pm.test('status is one of 200', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

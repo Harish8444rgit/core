@@ -1,0 +1,67 @@
+DATA BASE 
+1- pk must be id first ( after system systable we can take this thing to uuid)
+2- normalize table based on the query and usages
+
+LOGGING
+1- singel trace id
+2- grfana, alloy ,loki
+3-
+
+
+GRFAN DASHBAORD 
+
+METABSE DASHBAORD
+
+CODE STRUCHER OPTIMIZATION
+
+DOCKER 
+
+KUBARNATIS 
+
+API FOR PARTNER ONBOARDING ESAY
+API FOR ADDING WEBHOOK TO ORZANATIONAS id 
+
+ERROR HANDLING 
+HOW TO GENARATE AND SHARE USER ID 
+
+**Problem.** One link host can serve only one app. `assetlinks.json` and `apple-app-site-association` are built from a single set of environment variables, so with three partners only one package is verified. The other two apps never open from an `https` link.
+
+**Solution.** Store each partner's package, SHA-256, Team ID, and bundle id on that organization. When the phone requests the well-known URL, return every partner in that one file. Give each partner their own host only if their links are on a different domain.
+
+**Problem.** A template stores UTM, targeting, the attribution window, and the expiry, but creating a link only saves `template_id`. A click reads those values from the link. The link is created empty, so the template values are never used. Only the three destination URLs are read from the template, and only when the link left them blank.
+
+**Solution.** When `POST /api/links` receives a `templateId` and the body omits a field, copy that field from the template onto the new link:
+
+| Template field | Write onto the link |
+|---|---|
+| `utmParameters` | `utm_parameters` |
+| `targetingRules` | `targeting_rules` |
+| `defaultAttributionWindowHours` | `attribution_window_hours` |
+| `expiresAfterDays` | `expires_at` = now plus that many days |
+
+A value sent on the link still wins. After this, a link created from the Fatak Pay template stores `sms` / `cpc` / `diwali_2026`, the 200-hour window, and an expiry 120 days out, without repeating them in every request.
+
+
+
+
+These are the gaps in this repo against a normal partner setup like AppsFlyer. Clicks, redirects, and the Slack card already work.
+
+**1. One app file for every partner.** `/.well-known/assetlinks.json` and `apple-app-site-association` read one package, one SHA-256, one Team ID, and one bundle id from the environment. A second and third partner cannot be verified on the same host. Store each partner's app identity on the organization and return every partner in that one file.
+
+**2. The template does not fill the link.** `POST /api/links` saves `template_id` and ignores `utmParameters`, `targetingRules`, `defaultAttributionWindowHours`, and `expiresAfterDays`. A click then reads the empty link. When `templateId` is set and the body omits a field, copy that field onto the link. A value on the link still wins.
+
+**3. A new link is not part of the organization.** The create body has no `organizationId`, so the row stays `null` and the partner webhook never hears it. Accept `organizationId` on `POST /api/links` and save it.
+
+**4. A template is not part of the organization.** `link_templates` has no `organization_id`. `is_default` is per user, which is why two Fatak Pay templates are both default. Add `organization_id` and, when a link is created for that organization without a `templateId`, use that organization's default template.
+
+**5. A webhook cannot be created for an organization.** `POST /api/webhooks` accepts `userId` only. An organization webhook is a later SQL update. Accept `organizationId` on create.
+
+**6. The partner does not receive their dump shape.** We POST `{ event, event_id, timestamp, data }` with camelCase names. Their AppsFlyer ingest expects a flat body (`event_name`, `media_source`, `campaign`, `install_time`). Add a delivery format that maps our click, install, and in-app event into that flat JSON. The ad fields `af_ad`, `af_adset`, `af_siteid`, and `af_prt` have no source here.
+
+**7. The click drops half of the UTM.** `utm_term` and `utm_content` are saved on the link and are not written to `click_events`. The click insert only stores source, medium, and campaign. Add `utm_term` and `utm_content` to the click row and to the webhook.
+
+**8. The app user is not on the event.** The SDK user id is sent only when creating a link. Install and in-app events have no `customer_user_id`. One `device_id` column holds IDFA or GAID, with no split. Accept `customerUserId` on install and event, and store the advertising id by platform.
+
+**9. The server cannot know the app is installed.** A desktop or Slack click is `web` and goes to the website. A phone tries `fatakpay://` for about 1.5 seconds, then the store. AppsFlyer-style open-in-app needs the partner's package in the well-known file and `androidAppLink` or `iosUniversalLink` on the link. Until that matches, "installed or not" stays a browser guess.
+
+**10. The API has no auth.** `POST /api/links`, `POST /api/webhooks`, and the well-known routes do not check a partner key. Core leaves auth to the host. Put a partner API key in front of `/api/*` and scope every create to that partner's organization.

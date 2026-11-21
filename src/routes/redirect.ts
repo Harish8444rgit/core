@@ -7,6 +7,7 @@ import { parseUserAgent, getLocationFromIP, buildRedirectUrl, detectDevice, reso
 import { INSTALL_REFERRER_CLICK_KEY, storeFingerprintForClick, type FingerprintData } from '../lib/fingerprint.js';
 import { emitClickEvent } from '../lib/event-emitter.js';
 import { classifyBot, edgeBotSignal } from '../lib/bot-detection.js';
+import { generatePreviewHTML, isSocialScraper } from './preview.js';
 import {
   evaluateLinkSafetyDecision,
   blockCauseIsAbuse,
@@ -499,6 +500,31 @@ export async function redirectRoutes(
         .header('Cache-Control', 'no-store')
         .type('text/html')
         .send(generateWarningLinkHTML(destination, { reportUrl: options?.abuseReportUrl }));
+    }
+
+    // Slack, iMessage, Facebook and the other link-unfurl crawlers need the
+    // card from this link (og:title, og:description, og:image). A 302 makes
+    // them draw the destination page instead. No click is recorded: an unfurl
+    // is not a visit. A person's browser is not in this list and still redirects.
+    const scraperAgent = request.headers['user-agent'] || '';
+    if (isSocialScraper(scraperAgent)) {
+      const host = request.headers.host || request.hostname;
+      // ngrok (and any TLS-terminating proxy) forwards the public scheme.
+      // Without it the card's og:url is http while the pasted link is https.
+      const forwardedProto = request.headers['x-forwarded-proto'];
+      const proto =
+        (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto)?.split(',')[0].trim() ||
+        request.protocol ||
+        'https';
+      const baseUrl = host ? `${proto}://${host}` : 'https://link.forty';
+      const shortUrl = templateSlug
+        ? `${baseUrl}/${templateSlug}/${shortCode}`
+        : `${baseUrl}/${shortCode}`;
+      return reply
+        .status(200)
+        .header('X-Robots-Tag', 'noindex, nofollow')
+        .type('text/html')
+        .send(generatePreviewHTML(link, shortUrl, false));
     }
 
     // Check targeting rules BEFORE redirecting
